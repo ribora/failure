@@ -118,6 +118,11 @@ func Panic(r any) error {
 	if r == nil {
 		return nil
 	}
+	if e, ok := r.(error); ok {
+		if err, ok := FromError(e); ok {
+			return err
+		}
+	}
 	err := create([]error{ErrPanic}, "panic: {panic}", fmt.Sprint(r))
 	err.frames = parseDebugStack(debug.Stack(), 4)
 	return err
