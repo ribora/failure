@@ -215,6 +215,16 @@ func render(template string, args []any, initialPayload map[string]any) (string,
 func (e *Error) Error() string           { return e.message }
 func (e *Error) Unwrap() []error         { return e.codes }
 func (e *Error) Payload() map[string]any { return e.payload }
+func (e *Error) Is(target error) bool {
+	if e == target {
+		return true
+	}
+	if fe, ok := FromError(target); ok {
+		return fe.Type() == e.Type()
+	}
+	return e.Type() == slugify(target.Error())
+}
+
 func (e *Error) Stack() []Frame {
 	if len(e.frames) > 0 {
 		return e.frames
