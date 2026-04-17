@@ -63,9 +63,9 @@ func New(format string, args ...any) error {
 
 func Wrap(format string, args ...any) error {
 	var causes []error
-	if !strings.HasPrefix(format, "%w") {
-		if codeStr := slugify(format); codeStr != "" {
-			causes = append(causes, New(format, args...))
+	if !strings.Contains(format, "%w") {
+		if slugify(format) != "" {
+			causes = append(causes, New(format))
 		}
 	}
 	for _, a := range args {
