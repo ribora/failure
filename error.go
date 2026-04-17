@@ -56,15 +56,16 @@ func New(format string, args ...any) error {
 	if _, ok := registry[codeStr]; !ok {
 		registry[codeStr] = errors.New(codeStr)
 	}
+	code := registry[codeStr]
 	mu.Unlock()
-	return create([]error{registry[codeStr]}, format, args...)
+	return create([]error{code}, format, args...)
 }
 
 func Wrap(format string, args ...any) error {
 	var causes []error
 	if !strings.HasPrefix(format, "%w") {
 		if codeStr := slugify(format); codeStr != "" {
-			causes = append(causes, New(format))
+			causes = append(causes, New(format, args...))
 		}
 	}
 	for _, a := range args {
