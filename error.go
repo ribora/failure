@@ -108,8 +108,7 @@ func FromError(err error) (*Error, bool) {
 	if err == nil {
 		return nil, false
 	}
-	var e *Error
-	if errors.As(err, &e) {
+	if e, ok := errors.AsType[*Error](err); ok {
 		return e, true
 	}
 	return nil, false
@@ -123,6 +122,7 @@ func Panic(r any) error {
 		if err, ok := FromError(e); ok {
 			return err
 		}
+		return Wrap("%w: %w", ErrPanic, e)
 	}
 	err := create([]error{ErrPanic}, "panic: {panic}", fmt.Sprint(r))
 	err.frames = parseDebugStack(debug.Stack(), 4)
@@ -143,8 +143,7 @@ func create(causes []error, format string, args ...any) *Error {
 
 	combinedPayload := make(map[string]any)
 	for i := len(causes) - 1; i >= 0; i-- {
-		var child *Error
-		if errors.As(causes[i], &child) {
+		if child, ok := errors.AsType[*Error](causes[i]); ok {
 			for k, v := range child.payload {
 				combinedPayload[k] = v
 			}
@@ -252,8 +251,7 @@ func (e *Error) Stack() []Frame {
 }
 func (e *Error) Type() string {
 	if len(e.codes) > 0 {
-		var child *Error
-		if errors.As(e.codes[0], &child) {
+		if child, ok := errors.AsType[*Error](e.codes[0]); ok {
 			return child.Type()
 		}
 		return slugify(e.codes[0].Error())
@@ -264,8 +262,7 @@ func (e *Error) Type() string {
 func (e *Error) MarshalJSON() ([]byte, error) {
 	types := make([]string, 0, len(e.codes))
 	for _, c := range e.codes {
-		var child *Error
-		if errors.As(c, &child) {
+		if child, ok := errors.AsType[*Error](c); ok {
 			types = append(types, child.Type())
 		} else {
 			types = append(types, slugify(c.Error()))
