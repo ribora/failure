@@ -85,6 +85,11 @@ func Parse(err error) error {
 
 	e, ok := FromError(err)
 	if ok {
+		if len(e.stack) == 0 && len(e.frames) == 0 {
+			c := *e
+			c.stack = captureStack(3)
+			return &c
+		}
 		return e
 	}
 
