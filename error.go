@@ -51,7 +51,7 @@ func New(format string, args ...any) error {
 	if format == "" {
 		format = unknown
 	}
-	codeStr := slugify(format)
+	codeStr := Slugify(format)
 	mu.Lock()
 	if _, ok := registry[codeStr]; !ok {
 		registry[codeStr] = errors.New(codeStr)
@@ -64,7 +64,7 @@ func New(format string, args ...any) error {
 func Wrap(format string, args ...any) error {
 	var causes []error
 	if !strings.Contains(format, "%w") {
-		if slugify(format) != "" {
+		if Slugify(format) != "" {
 			causes = append(causes, New(format))
 		}
 	}
@@ -227,7 +227,7 @@ func (e *Error) Is(target error) bool {
 	if fe, ok := FromError(target); ok {
 		return fe.Type() == e.Type()
 	}
-	return e.Type() == slugify(target.Error())
+	return e.Type() == Slugify(target.Error())
 }
 
 func (e *Error) Stack() []Frame {
@@ -259,7 +259,7 @@ func (e *Error) Type() string {
 		if child, ok := errors.AsType[*Error](e.codes[0]); ok {
 			return child.Type()
 		}
-		return slugify(e.codes[0].Error())
+		return Slugify(e.codes[0].Error())
 	}
 	return unknown
 }
@@ -270,7 +270,7 @@ func (e *Error) MarshalJSON() ([]byte, error) {
 		if child, ok := errors.AsType[*Error](c); ok {
 			types = append(types, child.Type())
 		} else {
-			types = append(types, slugify(c.Error()))
+			types = append(types, Slugify(c.Error()))
 		}
 	}
 	return json.Marshal(aux{
@@ -307,7 +307,7 @@ func (e *Error) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func slugify(s string) string {
+func Slugify(s string) string {
 	s = strings.ReplaceAll(s, "%w", "")
 	var sb strings.Builder
 	inBr := false
