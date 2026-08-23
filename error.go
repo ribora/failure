@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -147,17 +149,13 @@ func create(causes []error, format string, args ...any) *Error {
 	}
 
 	combinedPayload := make(map[string]any)
-	for i := len(causes) - 1; i >= 0; i-- {
-		if child, ok := errors.AsType[*Error](causes[i]); ok {
-			for k, v := range child.payload {
-				combinedPayload[k] = v
-			}
+	for _, cause := range slices.Backward(causes) {
+		if child, ok := errors.AsType[*Error](cause); ok {
+			maps.Copy(combinedPayload, child.payload)
 		}
 	}
 	finalMsg, localPayload := render(msgWithErrors, args, combinedPayload)
-	for k, v := range localPayload {
-		combinedPayload[k] = v
-	}
+	maps.Copy(combinedPayload, localPayload)
 
 	return &Error{
 		codes:   causes,
@@ -188,19 +186,19 @@ func render(template string, args []any, initialPayload map[string]any) (string,
 				if argIdx < len(dataArgs) {
 					val := dataArgs[argIdx]
 					payload[key] = val
-					sb.WriteString(fmt.Sprint(val))
+					_, _ = fmt.Fprint(&sb, val)
 					argIdx++
 					i += end + 1
 					continue
 				}
 				if val, ok := payload[key]; ok {
-					sb.WriteString(fmt.Sprint(val))
+					_, _ = fmt.Fprint(&sb, val)
 					i += end + 1
 					continue
 				}
 			}
 		}
-		sb.WriteByte(template[i])
+		_ = sb.WriteByte(template[i])
 		i++
 	}
 
@@ -208,9 +206,9 @@ func render(template string, args []any, initialPayload map[string]any) (string,
 		sb.WriteString(" %!(EXTRA ")
 		for j, extra := range dataArgs[argIdx:] {
 			if j > 0 {
-				sb.WriteString(", ")
+				_, _ = sb.WriteString(", ")
 			}
-			sb.WriteString(fmt.Sprintf("%T=%v", extra, extra))
+			_, _ = fmt.Fprintf(&sb, "%T=%v", extra, extra)
 		}
 		sb.WriteString(")")
 	}
