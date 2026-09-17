@@ -16,6 +16,7 @@ go get gitlab.com/gorib/failure
 | **Message** | Human-readable string with values substituted in. |
 | **Payload** | `map[string]any` of named values extracted from the message template. |
 | **Stack** | Call-site frames captured by `Wrap` (not `New`). |
+| **Transport** | The status of the one hop the error crossed — an HTTP response, a gRPC status. Reachable, but not part of the error's identity, and removable before the error is raised onward. |
 
 ## Usage
 
@@ -78,6 +79,14 @@ if e, ok := failure.FromError(err); ok {
 }
 ```
 
+Matching compares type codes, never pointers. Against a target that is not a `failure` — a stdlib sentinel, one from somebody else's library — the target's own message is slugified and compared the same way, so `errors.Is(err, errors.New("resource not found"))` matches too.
+
+`Slugify` is exported because that rule has to be applied outside as well, and it is what turns a message into a type code: `%w` is removed, `{placeholder}` names are dropped along with their braces, letters and digits are kept, everything else collapses into single underscores, and the result is lowercased and trimmed. A slug slugifies to itself.
+
+```go
+failure.Slugify("db error: table={table} op={op}") // "db_error_table_op"
+```
+
 ### Stack traces
 
 ```go
@@ -85,6 +94,16 @@ if e, ok := failure.FromError(err); ok {
     for _, f := range e.Stack() {
         fmt.Printf("%s\n\t%s:%d\n", f.Function, f.File, f.Line)
     }
+}
+```
+
+Frames come newest first, with the runtime's own and `failure`'s own left out. A sink that wants them oldest first — Sentry does — reverses the slice itself.
+
+```go
+type Frame struct {
+    Function string
+    File     string
+    Line     int
 }
 ```
 
@@ -98,6 +117,14 @@ defer func() {
     }
 }()
 ```
+
+`Catch` is the same thing around a call, which is what a middleware wants:
+
+```go
+err := failure.Catch(func() error { return handler(ctx) })
+```
+
+An error the function returned itself wins — `Catch` only fills in the panic when the call came back nil.
 
 ### JSON serialization
 
@@ -115,6 +142,8 @@ Wire format:
 }
 ```
 
+`kind` is the discriminator, exported as `failure.Kind`. Decoding refuses a document carrying any other kind, so an unrelated JSON body that happens to have a `type` and a `message` is not taken for one of these. gRPC carries the same constant as the `ErrorInfo` domain, which is how an interceptor recognises the detail as ours.
+
 Decoding on the receiving side:
 
 ```go
@@ -127,6 +156,35 @@ err = failure.Parse(err)
 
 After decoding, `errors.Is(e, ErrNotFound)` works provided the sentinel was registered in the current process (i.e. `failure.New("resource not found")` was called). If the type is unrecognized, the type code string is used for matching.
 
+### Transport
+
+An error read off a neighbour's answer arrives with the status of the hop it crossed. That status is the neighbour's answer, not yours: fold it into the cause chain and it travels onward, until some service down the line renders a neighbour's 404 as its own.
+
+`AttachTransport` puts it in a slot of its own instead. A client attaches what it just crossed:
+
+```go
+answer, ok := failure.FromBytes(respBody)
+if !ok {
+    return failure.AttachTransport(failure.New(resp.Status), httpErr)
+}
+return failure.AttachTransport(answer, httpErr)
+```
+
+Whoever answers for the error strips it; whoever forwards it leaves it alone:
+
+```go
+failure.Transport(err)       // the status it crossed, or nil
+failure.DetachTransport(err) // the same error, with every hop's status removed
+```
+
+- Identity is untouched: `Type()` and `errors.Is` answer the error's own code, never the transport's.
+- `errors.As` still reaches it — `Unwrap` yields the transport — so a caller that forwards can read the status.
+- `DetachTransport` is recursive: a status an earlier hop left behind goes with it.
+- Attaching twice replaces. One hop, one status.
+- Attaching to a plain error turns it into a failure, typed by the slug of its message.
+- Attaching captures a stack if the error has none — a sentinel from `New`, or one decoded off the wire.
+- Transport is not serialized. The wire format above has no field for it, so each hop attaches its own.
+
 ## API reference
 
 ```go
@@ -134,11 +192,17 @@ After decoding, `errors.Is(e, ErrNotFound)` works provided the sentinel was regi
 func New(format string, args ...any) error
 func Wrap(format string, args ...any) error
 func Panic(r any) error
+func Catch(fn func() error) error
 
 // Inspection
 func FromError(err error) (*Error, bool)
 func FromBytes(b []byte) (*Error, bool)
 func Parse(err error) error
+
+// Transport
+func AttachTransport(err error, transport error) error
+func Transport(err error) error
+func DetachTransport(err error) error
 
 // Error methods
 func (e *Error) Type() string
@@ -146,7 +210,12 @@ func (e *Error) Payload() map[string]any
 func (e *Error) Stack() []Frame
 func (e *Error) Error() string
 func (e *Error) Unwrap() []error
+func (e *Error) Is(target error) bool
+
+// Type codes
+func Slugify(s string) string
+const Kind = "gorib_app_error_v1"
 
 // Sentinels
-var ErrPanic = failure.New("panic")
+var ErrPanic = errors.New("panic")
 ```

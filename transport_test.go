@@ -183,6 +183,26 @@ func TestTransportReads(t *testing.T) {
 	}
 }
 
+func TestTransportDoesNotCrossTheWire(t *testing.T) {
+	err, _ := carried()
+
+	data, marshalErr := json.Marshal(err)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	out, ok := failure.FromBytes(data)
+	if !ok {
+		t.Fatal("unreadable")
+	}
+
+	if got := failure.Transport(out); got != nil {
+		t.Fatalf("got %v, want nil: the hop that reads this attaches its own", got)
+	}
+	if !errors.Is(out, errRefused) {
+		t.Fatal("precondition: what was said crossed the wire")
+	}
+}
+
 type carrier struct{ err error }
 
 func (c *carrier) Error() string { return "carried: " + c.err.Error() }
