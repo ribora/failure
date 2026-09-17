@@ -31,6 +31,7 @@ type Error struct {
 	codes     []error
 	transport error
 	message   string
+	typ       string // Type() is on the errors.Is hot path
 	payload   map[string]any
 	stack     []uintptr
 	frames    []Frame
@@ -157,7 +158,7 @@ func (e *Error) carried() error {
 	return nil
 }
 
-// single hop it crossed and nothing to whoever reads the error next
+// the transport is the single hop it crossed, and nothing to whoever reads the error next
 func DetachTransport(err error) error {
 	fe, ok := FromError(err)
 	if !ok {
@@ -235,17 +236,26 @@ func create(causes []error, format string, args ...any) *Error {
 
 	return &Error{
 		codes:   causes,
+		typ:     typeOf(causes),
 		message: finalMsg,
 		payload: combinedPayload,
 	}
 }
 
+func typeOf(codes []error) string {
+	if len(codes) == 0 {
+		return unknown
+	}
+	if child, ok := errors.AsType[*Error](codes[0]); ok {
+		return child.Type()
+	}
+	return Slugify(codes[0].Error())
+}
+
 func render(template string, args []any, initialPayload map[string]any) (string, map[string]any) {
 	var sb strings.Builder
-	payload := make(map[string]any)
-	for k, v := range initialPayload {
-		payload[k] = v
-	}
+	payload := make(map[string]any, len(initialPayload))
+	maps.Copy(payload, initialPayload)
 	var dataArgs []any
 	for _, a := range args {
 		if _, ok := a.(error); !ok {
@@ -333,14 +343,12 @@ func (e *Error) Stack() []Frame {
 	}
 	return res
 }
+
 func (e *Error) Type() string {
-	if len(e.codes) > 0 {
-		if child, ok := errors.AsType[*Error](e.codes[0]); ok {
-			return child.Type()
-		}
-		return Slugify(e.codes[0].Error())
+	if e.typ == "" {
+		return typeOf(e.codes)
 	}
-	return unknown
+	return e.typ
 }
 
 func (e *Error) MarshalJSON() ([]byte, error) {
@@ -383,10 +391,14 @@ func (e *Error) UnmarshalJSON(data []byte) error {
 			e.codes[i] = errors.New(t)
 		}
 	}
+	e.typ = typeOf(e.codes)
 	return nil
 }
 
 func Slugify(s string) string {
+	if isSlug(s) {
+		return s
+	}
 	s = strings.ReplaceAll(s, "%w", "")
 	var sb strings.Builder
 	inBr := false
@@ -408,6 +420,24 @@ func Slugify(s string) string {
 		}
 	}
 	return strings.ToLower(strings.Trim(sb.String(), "_"))
+}
+
+func isSlug(s string) bool {
+	if s == "" || s[0] == '_' || s[len(s)-1] == '_' {
+		return false
+	}
+	var prev byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= '0' && c <= '9':
+		case c == '_' && prev != '_':
+		default:
+			return false
+		}
+		prev = c
+	}
+	return true
 }
 
 func captureStack(skip int) []uintptr {

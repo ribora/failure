@@ -94,8 +94,6 @@ func TestDetachRemovesIt(t *testing.T) {
 	}
 }
 
-// the shape a hop before this one leaves behind: the wrapper decided nothing, so the
-// transport underneath is still there and still answers
 func TestDetachIsRecursive(t *testing.T) {
 	carriedErr, _ := carried()
 	nested := failure.Wrap("%w: %w", failure.New("could not price the line"), carriedErr)

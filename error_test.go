@@ -3,6 +3,7 @@ package failure_test
 import (
 	"encoding/json"
 	"errors"
+	"math/rand/v2"
 	"strings"
 	"testing"
 
@@ -79,6 +80,70 @@ func TestWhereTheTypeComesFrom(t *testing.T) {
 	fe, _ = failure.FromError(written)
 	if got := fe.Type(); got != "oops_i_did_it_again" {
 		t.Fatalf("type = %q, want the format's", got)
+	}
+}
+
+// the gRPC status interceptor runs one Is per entry of its error mapper, on every
+// failed call
+func TestIsDoesNotAllocate(t *testing.T) {
+	sentinel := failure.New("no rows in result set")
+	err := failure.Wrap("%w: id={id}", sentinel, "42")
+
+	var match bool
+	if n := testing.AllocsPerRun(100, func() { match = errors.Is(err, sentinel) }); n != 0 {
+		t.Fatalf("errors.Is allocates %v times per call", n)
+	}
+	if !match {
+		t.Fatal("precondition: the sentinel matches")
+	}
+}
+
+func TestSlugifyTakesTheShortcutOnlyWhenItChangesNothing(t *testing.T) {
+	longWay := func(s string) string {
+		s = strings.ReplaceAll(s, "%w", "")
+		var sb strings.Builder
+		inBr := false
+		for _, r := range s {
+			if r == '{' {
+				inBr = true
+				continue
+			}
+			if r == '}' {
+				inBr = false
+				continue
+			}
+			if !inBr {
+				if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+					sb.WriteRune(r)
+				} else if sb.Len() > 0 && !strings.HasSuffix(sb.String(), "_") {
+					sb.WriteRune('_')
+				}
+			}
+		}
+		return strings.ToLower(strings.Trim(sb.String(), "_"))
+	}
+
+	for _, s := range []string{
+		"", "_", "__", "_a", "a_", "a__b", "a_b", "abc", "a1_b2", "0",
+		"no rows in result set", "no_rows_in_result_set",
+		"%w: id={id}", "UPPER", "404 Not Found", "привет",
+	} {
+		if got, want := failure.Slugify(s), longWay(s); got != want {
+			t.Fatalf("Slugify(%q) = %q, the long way round gives %q", s, got, want)
+		}
+	}
+
+	alphabet := []rune("abcXYZ019_ -.:{}%wпр")
+	r := rand.New(rand.NewPCG(1, 2))
+	for range 20000 {
+		var sb strings.Builder
+		for range r.IntN(24) {
+			sb.WriteRune(alphabet[r.IntN(len(alphabet))])
+		}
+		s := sb.String()
+		if got, want := failure.Slugify(s), longWay(s); got != want {
+			t.Fatalf("Slugify(%q) = %q, the long way round gives %q", s, got, want)
+		}
 	}
 }
 
