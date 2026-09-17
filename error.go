@@ -28,11 +28,12 @@ var (
 )
 
 type Error struct {
-	codes   []error
-	message string
-	payload map[string]any
-	stack   []uintptr
-	frames  []Frame
+	codes     []error
+	transport error
+	message   string
+	payload   map[string]any
+	stack     []uintptr
+	frames    []Frame
 }
 
 type Frame struct {
@@ -119,6 +120,81 @@ func FromError(err error) (*Error, bool) {
 		return e, true
 	}
 	return nil, false
+}
+
+func AttachTransport(err error, transport error) error {
+	if err == nil || transport == nil {
+		return err
+	}
+	fe, ok := FromError(Parse(err))
+	if !ok {
+		return err
+	}
+	c := *fe
+	c.transport = transport
+	return &c
+}
+
+func Transport(err error) error {
+	fe, ok := FromError(err)
+	if !ok {
+		return nil
+	}
+	return fe.carried()
+}
+
+func (e *Error) carried() error {
+	if e.transport != nil {
+		return e.transport
+	}
+	for _, c := range e.codes {
+		if child, ok := c.(*Error); ok {
+			if t := child.carried(); t != nil {
+				return t
+			}
+		}
+	}
+	return nil
+}
+
+// single hop it crossed and nothing to whoever reads the error next
+func DetachTransport(err error) error {
+	fe, ok := FromError(err)
+	if !ok {
+		return err
+	}
+	detached, changed := fe.detached()
+	if !changed {
+		return err
+	}
+	return detached
+}
+
+func (e *Error) detached() (*Error, bool) {
+	var codes []error
+	for i, c := range e.codes {
+		child, ok := c.(*Error)
+		if !ok {
+			continue
+		}
+		inner, changed := child.detached()
+		if !changed {
+			continue
+		}
+		if codes == nil {
+			codes = slices.Clone(e.codes)
+		}
+		codes[i] = inner
+	}
+	if codes == nil && e.transport == nil {
+		return e, false
+	}
+	c := *e
+	if codes != nil {
+		c.codes = codes
+	}
+	c.transport = nil
+	return &c, true
 }
 
 func Panic(r any) error {
@@ -215,8 +291,13 @@ func render(template string, args []any, initialPayload map[string]any) (string,
 	return sb.String(), payload
 }
 
-func (e *Error) Error() string           { return e.message }
-func (e *Error) Unwrap() []error         { return e.codes }
+func (e *Error) Error() string { return e.message }
+func (e *Error) Unwrap() []error {
+	if e.transport == nil {
+		return e.codes
+	}
+	return append(append(make([]error, 0, len(e.codes)+1), e.codes...), e.transport)
+}
 func (e *Error) Payload() map[string]any { return e.payload }
 func (e *Error) Is(target error) bool {
 	if e == target {
