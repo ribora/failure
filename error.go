@@ -246,10 +246,14 @@ func typeOf(codes []error) string {
 	if len(codes) == 0 {
 		return unknown
 	}
-	if child, ok := errors.AsType[*Error](codes[0]); ok {
+	return slugOf(codes[0])
+}
+
+func slugOf(err error) string {
+	if child, ok := errors.AsType[*Error](err); ok {
 		return child.Type()
 	}
-	return Slugify(codes[0].Error())
+	return Slugify(err.Error())
 }
 
 func render(template string, args []any, initialPayload map[string]any) (string, map[string]any) {
@@ -354,11 +358,7 @@ func (e *Error) Type() string {
 func (e *Error) MarshalJSON() ([]byte, error) {
 	types := make([]string, 0, len(e.codes))
 	for _, c := range e.codes {
-		if child, ok := errors.AsType[*Error](c); ok {
-			types = append(types, child.Type())
-		} else {
-			types = append(types, Slugify(c.Error()))
-		}
+		types = append(types, slugOf(c))
 	}
 	return json.Marshal(aux{
 		Kind:    Kind,

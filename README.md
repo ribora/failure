@@ -185,6 +185,28 @@ failure.DetachTransport(err) // the same error, with every hop's status removed
 - Attaching captures a stack if the error has none — a sentinel from `New`, or one decoded off the wire.
 - Transport is not serialized. The wire format above has no field for it, so each hop attaches its own.
 
+### Answering for a neighbour
+
+An adapter that answers for its neighbour turns the neighbour's refusal into one of its own:
+
+```go
+var priceErrors = failure.NewTranslation(model.ErrInfrastructure, map[error]error{
+    failure.New("promo code is not valid"):     model.ErrPromoNotApplicable,
+    failure.New("payment method is not found"): nil,
+})
+
+resp, err := client.Quote(ctx, req)
+if err != nil {
+    return 0, priceErrors.Translate(err)
+}
+```
+
+- The table is matched against the error's own type, by slug. The neighbour's status code is not the contract, and neither is a code wrapped under its type.
+- A named code becomes the mapped error, anything else the fallback. Either way the neighbour's message and payload are kept for whoever reads the log, but its type and transport are not: `errors.Is` answers the caller's error only, and the caller's own status answers.
+- A `nil` value means the answer is not an error: `Translate` returns nil and the caller returns its zero value.
+- A nil fallback forwards anything the table does not name: the error comes back as it came, transport included.
+- Two keys with one slug are one key, and which of their values wins is not defined.
+
 ## API reference
 
 ```go
@@ -203,6 +225,10 @@ func Parse(err error) error
 func AttachTransport(err error, transport error) error
 func Transport(err error) error
 func DetachTransport(err error) error
+
+// Translation
+func NewTranslation(fallback error, known map[error]error) Translation
+func (t Translation) Translate(err error) error
 
 // Error methods
 func (e *Error) Type() string

@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	stdSentinel  = errors.New("no rows in result set")
-	failSentinel = failure.New("no rows in result set")
+	errStd  = errors.New("no rows in result set")
+	errFailure = failure.New("no rows in result set")
 
 	sink  error
 	match bool
@@ -18,13 +18,13 @@ var (
 
 func BenchmarkStdErrorf(b *testing.B) {
 	for b.Loop() {
-		sink = fmt.Errorf("%w: id=%s", stdSentinel, "42")
+		sink = fmt.Errorf("%w: id=%s", errStd, "42")
 	}
 }
 
 func BenchmarkWrap(b *testing.B) {
 	for b.Loop() {
-		sink = failure.Wrap("%w: id={id}", failSentinel, "42")
+		sink = failure.Wrap("%w: id={id}", errFailure, "42")
 	}
 }
 
@@ -35,15 +35,15 @@ func BenchmarkNew(b *testing.B) {
 }
 
 func BenchmarkStdIs(b *testing.B) {
-	err := fmt.Errorf("%w: id=%s", stdSentinel, "42")
+	err := fmt.Errorf("%w: id=%s", errStd, "42")
 	for b.Loop() {
-		match = errors.Is(err, stdSentinel)
+		match = errors.Is(err, errStd)
 	}
 }
 
 func BenchmarkIs(b *testing.B) {
-	err := failure.Wrap("%w: id={id}", failSentinel, "42")
+	err := failure.Wrap("%w: id={id}", errFailure, "42")
 	for b.Loop() {
-		match = errors.Is(err, failSentinel)
+		match = errors.Is(err, errFailure)
 	}
 }

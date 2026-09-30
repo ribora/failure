@@ -17,13 +17,13 @@ func (t *transport) Error() string { return fmt.Sprintf("transport %d", t.code) 
 
 var errRefused = failure.New("promo code is not valid")
 
-func carried() (error, *transport) {
+func carried() (*transport, error) {
 	pipe := &transport{code: 400}
-	return failure.AttachTransport(failure.Wrap("%w: {code}", errRefused, "SALE"), pipe), pipe
+	return pipe, failure.AttachTransport(failure.Wrap("%w: {code}", errRefused, "SALE"), pipe)
 }
 
 func TestAttachedTransportIsFoundByAs(t *testing.T) {
-	err, pipe := carried()
+	pipe, err := carried()
 
 	var found *transport
 	if !errors.As(err, &found) {
@@ -35,7 +35,7 @@ func TestAttachedTransportIsFoundByAs(t *testing.T) {
 }
 
 func TestAttachedTransportIsNotTheIdentity(t *testing.T) {
-	err, _ := carried()
+	_, err := carried()
 
 	fe, ok := failure.FromError(err)
 	if !ok {
@@ -53,7 +53,7 @@ func TestAttachedTransportIsNotTheIdentity(t *testing.T) {
 }
 
 func TestAttachedTransportDoesNotTravel(t *testing.T) {
-	err, _ := carried()
+	_, err := carried()
 
 	data, mErr := json.Marshal(err)
 	if mErr != nil {
@@ -74,7 +74,7 @@ func TestAttachedTransportDoesNotTravel(t *testing.T) {
 }
 
 func TestDetachRemovesIt(t *testing.T) {
-	err, _ := carried()
+	_, err := carried()
 
 	got := failure.DetachTransport(err)
 
@@ -95,7 +95,7 @@ func TestDetachRemovesIt(t *testing.T) {
 }
 
 func TestDetachIsRecursive(t *testing.T) {
-	carriedErr, _ := carried()
+	_, carriedErr := carried()
 	nested := failure.Wrap("%w: %w", failure.New("could not price the line"), carriedErr)
 
 	var found *transport
@@ -164,7 +164,7 @@ func fromWire(t *testing.T) error {
 }
 
 func TestTransportReads(t *testing.T) {
-	err, pipe := carried()
+	pipe, err := carried()
 	if got := failure.Transport(err); got != pipe {
 		t.Fatalf("got %v, want the marked cause", got)
 	}
@@ -184,7 +184,7 @@ func TestTransportReads(t *testing.T) {
 }
 
 func TestTransportDoesNotCrossTheWire(t *testing.T) {
-	err, _ := carried()
+	_, err := carried()
 
 	data, marshalErr := json.Marshal(err)
 	if marshalErr != nil {
