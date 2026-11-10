@@ -56,8 +56,11 @@ Two substitution forms are supported:
 
 ```go
 err := failure.Wrap("db error: table={table} op={op}", ErrDB, "users", "insert")
-// err.Error()   → "db error: table=users op=insert"
-// err.Payload() → map[string]any{"table": "users", "op": "insert"}
+// err.Error() → "db error: table=users op=insert"
+
+if e, ok := failure.FromError(err); ok {
+    e.Payload() // map[string]any{"table": "users", "op": "insert"}
+}
 ```
 
 You can combine both:
@@ -117,6 +120,8 @@ defer func() {
     }
 }()
 ```
+
+A recovered value that is already a `*failure.Error` is returned as it is, without `ErrPanic`.
 
 `Catch` is the same thing around a call, which is what a middleware wants:
 
