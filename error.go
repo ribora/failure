@@ -14,9 +14,11 @@ import (
 )
 
 const (
-	Kind      = "gorib_app_error_v1"
-	PanicType = "gorib_panic_v1"
+	Kind      = "ribora_app_error_v1"
+	PanicType = "ribora_panic_v1"
 	unknown   = "unknown_error"
+
+	kindLegacy = "gorib_app_error_v1"
 )
 
 var (
@@ -369,12 +371,19 @@ func (e *Error) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// IsKind reports whether a discriminator off the wire is ours, here or as the
+// gRPC ErrorInfo domain. It still accepts the gorib kind, because services move
+// to ribora one at a time; drop that arm once none is left.
+func IsKind(kind string) bool {
+	return kind == Kind || kind == kindLegacy
+}
+
 func (e *Error) UnmarshalJSON(data []byte) error {
 	var a aux
 	if err := json.Unmarshal(data, &a); err != nil {
 		return err
 	}
-	if a.Kind != Kind {
+	if !IsKind(a.Kind) {
 		return errors.New("invalid kind")
 	}
 

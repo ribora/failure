@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"gitlab.com/gorib/failure"
+	"github.com/ribora/failure"
 )
 
 // stands for a grpc status or an http error: a foreign type a caller reads an answer out of

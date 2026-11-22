@@ -5,7 +5,7 @@ Structured, typed errors for Go. Errors carry a stable type code, human-readable
 ## Installation
 
 ```
-go get gitlab.com/gorib/failure
+go get github.com/ribora/failure
 ```
 
 ## Concepts
@@ -139,7 +139,7 @@ Wire format:
 
 ```json
 {
-  "kind":    "gorib_app_error_v1",
+  "kind":    "ribora_app_error_v1",
   "type":    "resource_not_found",
   "types":   ["resource_not_found"],
   "message": "resource not found: id=42",
@@ -148,6 +148,8 @@ Wire format:
 ```
 
 `kind` is the discriminator, exported as `failure.Kind`. Decoding refuses a document carrying any other kind, so an unrelated JSON body that happens to have a `type` and a `message` is not taken for one of these. gRPC carries the same constant as the `ErrorInfo` domain, which is how an interceptor recognises the detail as ours.
+
+Ask `failure.IsKind` rather than comparing against `Kind`: while services are moving from gorib to ribora, the previous discriminator `gorib_app_error_v1` is still read, so a caller that has not moved yet keeps its typed errors. It is never written, and the arm goes once no service runs `gorib/failure`.
 
 Decoding on the receiving side:
 
@@ -245,7 +247,8 @@ func (e *Error) Is(target error) bool
 
 // Type codes
 func Slugify(s string) string
-const Kind = "gorib_app_error_v1"
+func IsKind(kind string) bool
+const Kind = "ribora_app_error_v1"
 
 // Sentinels
 var ErrPanic = errors.New("panic")

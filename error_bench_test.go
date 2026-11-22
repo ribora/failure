@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"gitlab.com/gorib/failure"
+	"github.com/ribora/failure"
 )
 
 var (

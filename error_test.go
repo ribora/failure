@@ -7,10 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/gorib/failure"
+	"github.com/ribora/failure"
 )
 
-const wire = `{"kind":"gorib_app_error_v1","type":"gateway_error","types":["gateway_error"],"message":"gateway error: oops","payload":{"message":"oops"}}`
+const wire = `{"kind":"ribora_app_error_v1","type":"gateway_error","types":["gateway_error"],"message":"gateway error: oops","payload":{"message":"oops"}}`
+
+const wireLegacy = `{"kind":"gorib_app_error_v1","type":"gateway_error","types":["gateway_error"],"message":"gateway error: oops","payload":{"message":"oops"}}`
 
 func TestSameTextIsTheSameError(t *testing.T) {
 	one := failure.New("oops")
@@ -50,6 +52,21 @@ func TestAnErrorReadOffTheWireIsTheSentinelDeclaredHere(t *testing.T) {
 	}
 	if got := err.Type(); got != "gateway_error" {
 		t.Fatalf("type = %q", got)
+	}
+	if got := err.Payload()["message"]; got != "oops" {
+		t.Fatalf("payload message = %v, want oops", got)
+	}
+}
+
+func TestAnErrorFromAServiceStillOnGoribIsReadTheSameWay(t *testing.T) {
+	declaredHere := failure.New("gateway error")
+
+	err, ok := failure.FromBytes([]byte(wireLegacy))
+	if !ok {
+		t.Fatal("unreadable")
+	}
+	if !errors.Is(err, declaredHere) {
+		t.Fatal("a service that has not moved yet still speaks the old kind")
 	}
 	if got := err.Payload()["message"]; got != "oops" {
 		t.Fatalf("payload message = %v, want oops", got)
